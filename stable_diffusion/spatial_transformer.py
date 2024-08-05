@@ -82,11 +82,3 @@ class AttentionBlock(nn.Module):
         x = self.attn2(self.norm2(x), context = context) + x
         x = self.ff(self.norm3(x)) + x
         return x
-        
-
-# attnblock = AttentionBlock(512, d_cross = 1024, d_model = 512)
-
-# q = torch.randn(10, 16, 512)
-# context = torch.randn(10, 5, 1024)
-
-# attnblock(q, context).shape
