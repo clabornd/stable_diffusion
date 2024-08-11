@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import einops
-from .resblocks import conv_nd
 
 
 class FeedForward(nn.Sequential):
@@ -82,3 +81,42 @@ class AttentionBlock(nn.Module):
         x = self.attn2(self.norm2(x), context = context) + x
         x = self.ff(self.norm3(x)) + x
         return x
+
+class SpatialTransformer(nn.Module):
+    def __init__(self, in_channels, d_q, d_cross = None, d_model = 512, n_heads = 8, dropout = 0.0, depth = 1):
+        super().__init__()
+
+        self.in_channels = in_channels
+        self.d_q = d_q
+        self.d_cross = d_cross
+        self.d_model = d_model
+        self.n_heads = n_heads
+        
+        self.norm = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+
+        self.conv_in = nn.Conv2d(self.in_channels, d_q, kernel_size = 1, stride = 1, padding = 0)
+        
+        self.blocks = nn.ModuleList(
+            [AttentionBlock(d_q, d_cross, d_model, n_heads, dropout) for _ in range(depth)]
+        )
+
+        self.conv_out = nn.Conv2d(d_q, in_channels, kernel_size = 1, stride = 1, padding = 0)
+
+
+
+    def forward(self, x, context = None):
+        x_in = x
+
+        x = self.norm(x)
+        x = self.conv_in(x) # B, d_q, H, W
+
+        b, d_q, h, w = x.shape
+
+        x = einops.rearrange(x, "b c h w -> b (h w) c") # attention mechanism expects B T C
+
+        for b in self.blocks:
+            x = b(x, context)
+
+        x = einops.rearrange(x, "b (h w) c -> b c h w", h = h, w = w)
+        x = self.conv_out(x)
+        return x + x_in
