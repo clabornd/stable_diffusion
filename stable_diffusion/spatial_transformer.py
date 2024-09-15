@@ -32,6 +32,10 @@ class CrossAttention(nn.Module):
         self.n_heads = n_heads
 
     def forward(self, x, context = None, mask = None):
+        # prevent einops broadcasting
+        if context is not None:
+            assert x.shape[0] == context.shape[0], f"Batch size of x and context must match, found {x.shape[0]} and {context.shape[0]}"
+
         if context is None:
             context = x
         
@@ -60,7 +64,6 @@ class CrossAttention(nn.Module):
 
         return out
 
-        
 class AttentionBlock(nn.Module):
     def __init__(self, d_q, d_cross = None, d_model = 512, n_heads = 8, dropout = 0.0):
         super().__init__()
@@ -101,8 +104,6 @@ class SpatialTransformer(nn.Module):
         )
 
         self.conv_out = nn.Conv2d(d_q, in_channels, kernel_size = 1, stride = 1, padding = 0)
-
-
 
     def forward(self, x, context = None):
         x_in = x

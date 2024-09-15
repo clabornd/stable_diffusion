@@ -70,14 +70,13 @@ class DownSample(nn.Module):
         return self.downsample(x)
 
 class ResBlock(nn.Module):
-    def __init__(self, channels_in, d_emb, channels_out=None, resample=None):
+    def __init__(self, channels_in, d_emb, channels_out=None, resample=None, dropout = 0.):
         super().__init__()
     
         self.channels_in = channels_in
         self.channels_out = channels_out or channels_in
 
-        self.group_norm_in = nn.GroupNorm(32, channels_in) 
-        self.group_norm_out = nn.GroupNorm(32, self.channels_out)
+        self.group_norm_in = nn.GroupNorm(32, channels_in)
 
         self.conv_in = conv_nd(2, channels_in, self.channels_out, 3, padding=1)
         self.conv_out = conv_nd(2, self.channels_out, self.channels_out, 3, padding=1)
@@ -101,16 +100,23 @@ class ResBlock(nn.Module):
             nn.Linear(d_emb, self.channels_out)
         )
 
-    def forward(self, x: torch.tensor, emb: torch.tensor):
-        """_summary_
+        self.out_block = nn.Sequential(
+            nn.GroupNorm(32, self.channels_out),
+            nn.SiLU(),
+            nn.Dropout(dropout),
+            self.conv_out
+        )
 
+    def forward(self, x: torch.tensor, emb: torch.tensor):
+        """
         Args:
             x (torch.tensor): Input tensor of shape (B, C, H, W)
             emb (torch.tensor): Time embedding of dimension (B, D)
 
         Returns:
-            _type_: _description_
+            torch.tensor: Output tensor of shape (B, C*, H*, W*)
         """
+
         h = self.group_norm_in(x)
         h = F.silu(h)
         h = self.resample_h(h)
@@ -119,9 +125,7 @@ class ResBlock(nn.Module):
         emb = self.time_emb(emb)
         h = h + emb[:, :, None, None] # expand spatial dims, add along channel dim
 
-        h = self.group_norm_out(h)
-        h = F.silu(h)
-        h = self.conv_out(h)
+        h = self.out_block(h)
 
         x = self.resample_x(x)
 
