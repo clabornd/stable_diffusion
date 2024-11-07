@@ -5,6 +5,7 @@ import torch.nn.functional as F
 # This resnet block needs:
 # The input
 
+
 def conv_nd(dims, *args, **kwargs):
     """
     Create a 1D, 2D, or 3D convolution module.
@@ -16,6 +17,7 @@ def conv_nd(dims, *args, **kwargs):
     elif dims == 3:
         return nn.Conv3d(*args, **kwargs)
     raise ValueError(f"unsupported dimensions: {dims}")
+
 
 def avg_pool_nd(dims, *args, **kwargs):
     """
@@ -29,10 +31,11 @@ def avg_pool_nd(dims, *args, **kwargs):
         return nn.AvgPool3d(*args, **kwargs)
     raise ValueError(f"unsupported dimensions: {dims}")
 
+
 class Upsample(nn.Module):
-    def __init__(self, channels_in, channels_out=None, dims=2, use_conv=False, padding = 1):
+    def __init__(self, channels_in, channels_out=None, dims=2, use_conv=False, padding=1):
         super().__init__()
-        
+
         self.channels_in = channels_in
         self.channels_out = channels_out or channels_in
         self.dims = dims
@@ -44,35 +47,39 @@ class Upsample(nn.Module):
         if self.dims == 3:
             _, _, h, w, d = x.size()
             # upsampling only occurs in the last two dimensions for some reason
-            x = F.interpolate(x, (h, w*2, d*2), scale_factor=2, mode='nearest')
+            x = F.interpolate(x, (h, w * 2, d * 2), scale_factor=2, mode="nearest")
         else:
-            x = F.interpolate(x, scale_factor=2, mode='nearest')
+            x = F.interpolate(x, scale_factor=2, mode="nearest")
 
-        if hasattr(self, 'conv'):
+        if hasattr(self, "conv"):
             x = self.conv(x)
 
         return x
-    
+
+
 class DownSample(nn.Module):
-    def __init__(self, channels_in, channels_out=None, dims=2, use_conv=False, padding = 1):
+    def __init__(self, channels_in, channels_out=None, dims=2, use_conv=False, padding=1):
         super().__init__()
-        
+
         self.channels_in = channels_in
         self.channels_out = channels_out or channels_in
         self.dims = dims
 
         if use_conv:
-            self.downsample = conv_nd(dims, channels_in, self.channels_out, 3, stride = 2, padding=padding)
+            self.downsample = conv_nd(
+                dims, channels_in, self.channels_out, 3, stride=2, padding=padding
+            )
         else:
-            self.downsample = avg_pool_nd(dims, kernel_size = 2, stride = 2)
+            self.downsample = avg_pool_nd(dims, kernel_size=2, stride=2)
 
     def forward(self, x):
         return self.downsample(x)
 
+
 class ResBlock(nn.Module):
-    def __init__(self, channels_in, d_emb, channels_out=None, resample=None, dropout = 0.):
+    def __init__(self, channels_in, d_emb, channels_out=None, resample=None, dropout=0.0):
         super().__init__()
-    
+
         self.channels_in = channels_in
         self.channels_out = channels_out or channels_in
 
@@ -81,10 +88,10 @@ class ResBlock(nn.Module):
         self.conv_in = conv_nd(2, channels_in, self.channels_out, 3, padding=1)
         self.conv_out = conv_nd(2, self.channels_out, self.channels_out, 3, padding=1)
 
-        if resample == 'down':
+        if resample == "down":
             self.resample_h = DownSample(channels_in, dims=2, use_conv=False)
             self.resample_x = DownSample(channels_in, dims=2, use_conv=True)
-        elif resample == 'up':
+        elif resample == "up":
             self.resample_h = Upsample(channels_in, dims=2, use_conv=True)
             self.resample_x = Upsample(channels_in, dims=2, use_conv=True)
         else:
@@ -94,17 +101,11 @@ class ResBlock(nn.Module):
             self.skip_connection = nn.Identity()
         else:
             self.skip_connection = conv_nd(2, channels_in, self.channels_out, 1)
-        
-        self.time_emb = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(d_emb, self.channels_out)
-        )
+
+        self.time_emb = nn.Sequential(nn.SiLU(), nn.Linear(d_emb, self.channels_out))
 
         self.out_block = nn.Sequential(
-            nn.GroupNorm(32, self.channels_out),
-            nn.SiLU(),
-            nn.Dropout(dropout),
-            self.conv_out
+            nn.GroupNorm(32, self.channels_out), nn.SiLU(), nn.Dropout(dropout), self.conv_out
         )
 
     def forward(self, x: torch.tensor, emb: torch.tensor):
@@ -123,12 +124,10 @@ class ResBlock(nn.Module):
         h = self.conv_in(h)
 
         emb = self.time_emb(emb)
-        h = h + emb[:, :, None, None] # expand spatial dims, add along channel dim
+        h = h + emb[:, :, None, None]  # expand spatial dims, add along channel dim
 
         h = self.out_block(h)
 
         x = self.resample_x(x)
 
         return h + self.skip_connection(x)
-
-

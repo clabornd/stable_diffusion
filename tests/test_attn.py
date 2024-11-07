@@ -1,7 +1,8 @@
 import pytest
 import torch
 
-from stable_diffusion.spatial_transformer import CrossAttention, AttentionBlock
+from stable_diffusion.spatial_transformer import AttentionBlock, CrossAttention
+
 
 def test_xattn_dims():
     torch.manual_seed(459)

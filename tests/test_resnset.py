@@ -3,6 +3,7 @@ import torch
 
 from stable_diffusion.resblocks import ResBlock
 
+
 def test_resblock_dims():
     res_down = ResBlock(32, d_emb = 64, channels_out = 64, resample = 'down')
     res_up = ResBlock(32, d_emb = 64, channels_out = 64, resample = 'up')
