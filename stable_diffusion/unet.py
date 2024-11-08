@@ -45,6 +45,7 @@ class UNET(nn.Module):
         self.channel_mults = channel_mults
         self.channels_in = channels_in
         self.channels_model = channels_model
+        self.context_dim = context_dim
 
         # will fill up the downsampling and upsampling trunks in for loops
         self.down_blocks = nn.ModuleList(
@@ -66,7 +67,7 @@ class UNET(nn.Module):
             sp_transformer = SpatialTransformer(
                 in_channels=ch_out,
                 d_q=ch_out,
-                d_cross=context_dim,
+                d_cross=context_dim if context_dim else ch_out,
                 d_model=d_model,
                 dropout=dropout,
             )
@@ -89,7 +90,7 @@ class UNET(nn.Module):
             SpatialTransformer(
                 in_channels=ch_out,
                 d_q=ch_out,
-                d_cross=context_dim,
+                d_cross=context_dim if context_dim else ch_out,
                 d_model=d_model,
                 dropout=dropout,
             ),
@@ -116,7 +117,7 @@ class UNET(nn.Module):
             sp_trf = SpatialTransformer(
                 in_channels=channels_model * mult,
                 d_q=channels_model * mult,
-                d_cross=context_dim,
+                d_cross=context_dim if context_dim else channels_model * mult,
                 d_model=d_model,
                 dropout=dropout,
             )
@@ -134,7 +135,7 @@ class UNET(nn.Module):
                     SpatialTransformer(
                         in_channels=ch_out,
                         d_q=ch_out,
-                        d_cross=context_dim,
+                        d_cross=context_dim if context_dim else ch_out,
                         d_model=d_model,
                         dropout=dropout,
                     ),
@@ -179,57 +180,3 @@ class UNET(nn.Module):
 
         x = self.out_block(x)
         return x
-
-
-# d_q = 256
-# d_cross = 1024
-# d_model = 512
-# N = 5
-# T_q = 10
-# T_c = 5
-
-channels_out = 3
-channels_in = 3
-t_emb_dim = 16
-d_cross = 16
-d_model = 32
-N = 1
-T_q = 10
-T_c = 5
-
-myunet = UNET(
-    channels_in=3,
-    channels_model=32,
-    channels_out=channels_out,
-    t_emb_dim=t_emb_dim,
-    context_dim=d_cross,
-    d_model=d_model,
-)
-
-q = torch.randn(N, T_q, channels_out)
-cross = torch.randn(N, T_c, d_cross)
-dummy_input = torch.randn(N, channels_in, 64, 64)
-t_emb = torch.randn(N, t_emb_dim)
-
-out = myunet(dummy_input, timesteps=t_emb, context=cross)
-
-# intermediate = myunet.down_blocks[0](dummy_input, t_emb, cross)
-
-
-# x = myunet.down_blocks[1][0](intermediate, t_emb)
-# x = myunet.down_blocks[1][1](intermediate, cross)
-
-# intermediate.shape
-
-# spatial_trf = myunet.down_blocks[1][1]
-
-# x_in = intermediate
-
-# x = spatial_trf.norm(intermediate)
-# x = spatial_trf.conv_in(x)
-
-# b, d_q, h, w = x.shape
-
-# x = einops.rearrange(x, "b c h w -> b (h w) c")
-
-# spatial_trf.blocks[0](x, cross)
