@@ -90,10 +90,10 @@ class ResBlock(nn.Module):
 
         if resample == "down":
             self.resample_h = DownSample(channels_in, dims=2, use_conv=False)
-            self.resample_x = DownSample(channels_in, dims=2, use_conv=True)
+            self.resample_x = DownSample(channels_in, dims=2, use_conv=False)
         elif resample == "up":
-            self.resample_h = Upsample(channels_in, dims=2, use_conv=True)
-            self.resample_x = Upsample(channels_in, dims=2, use_conv=True)
+            self.resample_h = Upsample(channels_in, dims=2, use_conv=False)
+            self.resample_x = Upsample(channels_in, dims=2, use_conv=False)
         else:
             self.resample_x = self.resample_h = nn.Identity()
 

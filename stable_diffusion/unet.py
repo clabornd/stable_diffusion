@@ -38,6 +38,7 @@ class UNET(nn.Module):
         context_dim,
         d_model,
         channel_mults=[1, 2, 4, 8],
+        attention_resolutions = [2, 4],
         dropout=0.0
     ):
         super().__init__()
@@ -64,15 +65,20 @@ class UNET(nn.Module):
             ch_out = channels_model * mult
 
             resblock = ResBlock(channels_in=ch_in, d_emb=t_emb_dim, channels_out=ch_out)
-            sp_transformer = SpatialTransformer(
-                in_channels=ch_out,
-                d_q=ch_out,
-                d_cross=context_dim if context_dim else ch_out,
-                d_model=d_model,
-                dropout=dropout,
-            )
+            layers = [resblock]
 
-            self.down_blocks.append(EmbeddingWrapper(resblock, sp_transformer))
+            if i in attention_resolutions:
+                sp_transformer = SpatialTransformer(
+                    in_channels=ch_out,
+                    d_q=ch_out,
+                    d_cross=context_dim if context_dim else ch_out,
+                    d_model=d_model,
+                    dropout=dropout,
+                    n_heads=2
+                )
+                layers.append(sp_transformer)
+
+            self.down_blocks.append(EmbeddingWrapper(*layers))
 
             track_chans.append(ch_out)
 
@@ -114,33 +120,29 @@ class UNET(nn.Module):
             # this block will output this many channels, we set it here since we want the next iteration to start the channels of the previous block.
             ch_out = channels_model * mult
 
-            sp_trf = SpatialTransformer(
-                in_channels=channels_model * mult,
-                d_q=channels_model * mult,
-                d_cross=context_dim if context_dim else channels_model * mult,
-                d_model=d_model,
-                dropout=dropout,
-            )
+            layers = [res1]
 
-            self.up_blocks.append(EmbeddingWrapper(res1, sp_trf))
+            if i in attention_resolutions:
+                sp_trf = SpatialTransformer(
+                    in_channels=channels_model * mult,
+                    d_q=channels_model * mult,
+                    d_cross=context_dim if context_dim else channels_model * mult,
+                    d_model=d_model,
+                    dropout=dropout,
+                )
+                layers.append(sp_trf)
+
+            self.up_blocks.append(EmbeddingWrapper(*layers))
 
             down_ch = track_chans.pop()
 
             # and again, same dimension ...
             layers = []
 
-            layers.extend(
-                [
-                    ResBlock(ch_out + down_ch, d_emb=t_emb_dim, channels_out=ch_out),
-                    SpatialTransformer(
-                        in_channels=ch_out,
-                        d_q=ch_out,
-                        d_cross=context_dim if context_dim else ch_out,
-                        d_model=d_model,
-                        dropout=dropout,
-                    ),
-                ]
-            )
+            layers.append(ResBlock(ch_out + down_ch, d_emb=t_emb_dim, channels_out=ch_out))
+
+            if i in attention_resolutions:
+                layers.append(SpatialTransformer(in_channels=ch_out, d_q=ch_out, d_cross=context_dim if context_dim else ch_out, d_model=d_model, dropout=dropout))
 
             # ... with an upsampling layer at all but the last, since at the last we are matching the initial convolutional layer and a res + spatial transformer block, not an upsampling layer
             if i > 0:
