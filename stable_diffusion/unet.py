@@ -29,6 +29,9 @@ class EmbeddingWrapper(nn.Sequential):
 
 
 class UNET(nn.Module):
+    """A simpler implementation of the UNET at https://github.com/CompVis/stable-diffusion/blob/21f890f9da3cfbeaba8e2ac3c425ee9e998d5229/ldm/modules/diffusionmodules/openaimodel.py
+    Here I force the use of spatial attention when adding the guidance layers.
+    """
     def __init__(
         self,
         channels_in,
@@ -41,6 +44,18 @@ class UNET(nn.Module):
         attention_resolutions = [2, 4],
         dropout=0.0
     ):
+        """
+        Args:
+            channels_in (int): number of input channels
+            channels_model (int): number of initial channels which is then multiplied by the values in `channel_mults`
+            channels_out (int): number of output channels
+            t_emb_dim (int): time embedding dimension
+            context_dim (int): context dimension when performing guided diffusion
+            d_model (int): embedding dimension of the attention layers
+            channel_mults (list): list of channel multipliers which will determine the number of channels at each block depending on `channels_model`  
+            attention_resolutions (list): list of attention resolutions where attention is applied
+            dropout (float): dropout rate
+        """
         super().__init__()
 
         self.channel_mults = channel_mults
@@ -166,6 +181,11 @@ class UNET(nn.Module):
             timesteps (torch.tensor): time embedding
             context (torch.tensor): context tensor
         """
+        if context is None:
+            assert self.context_dim is None, "Must pass context if context_dimension is set"
+        else:
+            assert self.context_dim is not None, "You must set context_dim when creating the model if planning on passing context embeddings."
+        
         # downsample
         downsampled = []
         for block in self.down_blocks:
