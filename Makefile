@@ -17,13 +17,15 @@ requirements:
 	conda env update --name $(PROJECT_NAME) --file environment.yml --prune
 	
 
-
-
 ## Delete all compiled Python files
 .PHONY: clean
 clean:
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
+
+.PHONY: test
+test:
+	python -m pytest
 
 ## Lint using flake8 and black (use `make format` to do formatting)
 .PHONY: lint
@@ -38,8 +40,6 @@ format:
 	black --config pyproject.toml stable_diffusion
 
 
-
-
 ## Set up python interpreter environment
 .PHONY: create_environment
 create_environment:
@@ -47,13 +47,9 @@ create_environment:
 	
 	@echo ">>> conda env created. Activate with:\nconda activate $(PROJECT_NAME)"
 	
-
-
-
 #################################################################################
 # PROJECT RULES                                                                 #
 #################################################################################
-
 
 ## Make Dataset
 .PHONY: data

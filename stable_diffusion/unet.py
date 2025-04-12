@@ -3,19 +3,23 @@ import torch.nn as nn
 
 from .resblocks import ResBlock
 from .spatial_transformer import SpatialTransformer
+from .timestep import time_embeddings
 
 
 class EmbeddingWrapper(nn.Sequential):
     """
-    Wrapper for a sequence of layers that can handle embeddings
+    Wrapper for a sequence of layers that take an input tensor and optionally either a tensor of time embeddings or context embeddings.
     """
 
-    def forward(self, x, t_emb=None, context=None):
+    def forward(self, x: torch.tensor, t_emb: torch.tensor = None, context: torch.tensor = None):
         """
         Args:
-            x (torch.tensor): input tensor
-            t_emb (torch.tensor): time embedding
-            context (torch.tensor): context tensor
+            x (torch.tensor): main input image tensor B x C x H x W
+            t_emb (torch.tensor): time embedding B x t_emb_dim
+            context (torch.tensor): context tensor B x d_cross to be passed as context to cross-attention mechanism.
+
+        Returns:
+            torch.tensor: output tensor
         """
         for layer in self:
             if isinstance(layer, ResBlock):
@@ -31,37 +35,38 @@ class EmbeddingWrapper(nn.Sequential):
 class UNET(nn.Module):
     """A simpler implementation of the UNET at https://github.com/CompVis/stable-diffusion/blob/21f890f9da3cfbeaba8e2ac3c425ee9e998d5229/ldm/modules/diffusionmodules/openaimodel.py
     Here I force the use of spatial attention when adding the guidance layers.
+
+    Args:
+        channels_in (int): number of input channels
+        channels_model (int): number of initial channels which is then multiplied by the values in `channel_mults`
+        channels_out (int): number of output channels
+        context_dim (int): context dimension when performing guided diffusion
+        d_model (int): embedding dimension of the attention layers
+        t_emb_dim (int): time embedding dimension
+        channel_mults (list): list of channel multipliers which will determine the number of channels at each block depending on `channels_model`
+        attention_resolutions (list): list of attention resolutions where attention is applied
+        dropout (float): dropout rate
     """
+
     def __init__(
         self,
-        channels_in,
-        channels_model,
-        channels_out,
-        t_emb_dim,
-        context_dim,
-        d_model,
-        channel_mults=[1, 2, 4, 8],
-        attention_resolutions = [2, 4],
-        dropout=0.0
+        channels_in: int,
+        channels_model: int,
+        channels_out: int,
+        context_dim: int,
+        d_model: int,
+        t_emb_dim: int = None,
+        channel_mults: list[int] = [1, 2, 4, 8],
+        attention_resolutions: list[int] = [2, 4],
+        dropout: float = 0.0,
     ):
-        """
-        Args:
-            channels_in (int): number of input channels
-            channels_model (int): number of initial channels which is then multiplied by the values in `channel_mults`
-            channels_out (int): number of output channels
-            t_emb_dim (int): time embedding dimension
-            context_dim (int): context dimension when performing guided diffusion
-            d_model (int): embedding dimension of the attention layers
-            channel_mults (list): list of channel multipliers which will determine the number of channels at each block depending on `channels_model`  
-            attention_resolutions (list): list of attention resolutions where attention is applied
-            dropout (float): dropout rate
-        """
         super().__init__()
 
         self.channel_mults = channel_mults
         self.channels_in = channels_in
         self.channels_model = channels_model
         self.context_dim = context_dim
+        self.t_emb_dim = t_emb_dim or channels_model
 
         # will fill up the downsampling and upsampling trunks in for loops
         self.down_blocks = nn.ModuleList(
@@ -79,7 +84,7 @@ class UNET(nn.Module):
             # what is timestep dimension???? t_emb -> d_t -> d_model
             ch_out = channels_model * mult
 
-            resblock = ResBlock(channels_in=ch_in, d_emb=t_emb_dim, channels_out=ch_out)
+            resblock = ResBlock(channels_in=ch_in, d_emb=self.t_emb_dim, channels_out=ch_out)
             layers = [resblock]
 
             if i in attention_resolutions:
@@ -89,7 +94,7 @@ class UNET(nn.Module):
                     d_cross=context_dim if context_dim else ch_out,
                     d_model=d_model,
                     dropout=dropout,
-                    n_heads=2
+                    n_heads=2,
                 )
                 layers.append(sp_transformer)
 
@@ -99,7 +104,9 @@ class UNET(nn.Module):
 
             # downsample after every mult except the last
             if i != len(channel_mults) - 1:
-                res_ds = ResBlock(ch_out, d_emb=t_emb_dim, channels_out=ch_out, resample="down")
+                res_ds = ResBlock(
+                    ch_out, d_emb=self.t_emb_dim, channels_out=ch_out, resample="down"
+                )
                 self.down_blocks.append(EmbeddingWrapper(res_ds))
                 track_chans.append(ch_out)
                 ch_in = ch_out
@@ -107,7 +114,7 @@ class UNET(nn.Module):
         # middle block, this is Res, Attention, Res
         # ch_out is the last channel dimension for constructing the downsampling layers
         self.middle_block = EmbeddingWrapper(
-            ResBlock(channels_in=ch_out, d_emb=t_emb_dim),
+            ResBlock(channels_in=ch_out, d_emb=self.t_emb_dim),
             SpatialTransformer(
                 in_channels=ch_out,
                 d_q=ch_out,
@@ -115,7 +122,7 @@ class UNET(nn.Module):
                 d_model=d_model,
                 dropout=dropout,
             ),
-            ResBlock(channels_in=ch_out, d_emb=t_emb_dim),
+            ResBlock(channels_in=ch_out, d_emb=self.t_emb_dim),
         )
 
         # upsampling block
@@ -130,7 +137,9 @@ class UNET(nn.Module):
             # We have two of these, one that matches the Res + Transformer block, and another that matches the downsampling block
 
             # first res block
-            res1 = ResBlock(ch_out + down_ch, d_emb=t_emb_dim, channels_out=channels_model * mult)
+            res1 = ResBlock(
+                ch_out + down_ch, d_emb=self.t_emb_dim, channels_out=channels_model * mult
+            )
 
             # this block will output this many channels, we set it here since we want the next iteration to start the channels of the previous block.
             ch_out = channels_model * mult
@@ -154,15 +163,23 @@ class UNET(nn.Module):
             # and again, same dimension ...
             layers = []
 
-            layers.append(ResBlock(ch_out + down_ch, d_emb=t_emb_dim, channels_out=ch_out))
+            layers.append(ResBlock(ch_out + down_ch, d_emb=self.t_emb_dim, channels_out=ch_out))
 
             if i in attention_resolutions:
-                layers.append(SpatialTransformer(in_channels=ch_out, d_q=ch_out, d_cross=context_dim if context_dim else ch_out, d_model=d_model, dropout=dropout))
+                layers.append(
+                    SpatialTransformer(
+                        in_channels=ch_out,
+                        d_q=ch_out,
+                        d_cross=context_dim if context_dim else ch_out,
+                        d_model=d_model,
+                        dropout=dropout,
+                    )
+                )
 
             # ... with an upsampling layer at all but the last, since at the last we are matching the initial convolutional layer and a res + spatial transformer block, not an upsampling layer
             if i > 0:
                 layers.append(
-                    ResBlock(ch_out, d_emb=t_emb_dim, channels_out=ch_out, resample="up")
+                    ResBlock(ch_out, d_emb=self.t_emb_dim, channels_out=ch_out, resample="up")
                 )
 
             self.up_blocks.append(EmbeddingWrapper(*layers))
@@ -178,14 +195,19 @@ class UNET(nn.Module):
         """
         Args:
             x (torch.tensor): input tensor
-            timesteps (torch.tensor): time embedding
+            timesteps (torch.tensor): Size (B,) tensor containing time indices to be turned into embeddings.
             context (torch.tensor): context tensor
         """
         if context is None:
             assert self.context_dim is None, "Must pass context if context_dimension is set"
         else:
-            assert self.context_dim is not None, "You must set context_dim when creating the model if planning on passing context embeddings."
-        
+            assert (
+                self.context_dim is not None
+            ), "You must set context_dim when creating the model if planning on passing context embeddings."
+
+        if timesteps is not None:
+            timesteps = time_embeddings(timesteps, self.t_emb_dim)
+
         # downsample
         downsampled = []
         for block in self.down_blocks:

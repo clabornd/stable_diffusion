@@ -25,14 +25,13 @@ def test_unet():
 
     cross = torch.randn(N, T_c, d_cross)
     dummy_input = torch.randn(N, channels_in, imsize, imsize)
-    t_emb = torch.randn(N, t_emb_dim)
-
-    out = myunet(dummy_input, timesteps = t_emb, context = cross)
+    t_steps = torch.randint(0, 1000, size = (N,))
+    out = myunet(dummy_input, timesteps = t_steps, context = cross)
 
     assert out.shape == (N, channels_in, imsize, imsize)
 
     with pytest.raises(AssertionError):
-        myunet(dummy_input, timesteps = t_emb, context = None)
+        myunet(dummy_input, timesteps = t_steps, context = None)
 
     myunet_nocross = UNET(
         channels_in = channels_in, 
@@ -43,5 +42,20 @@ def test_unet():
         d_model = d_model
     )
 
+    assert myunet_nocross.down_blocks[1][0].time_emb[-1].in_features == t_emb_dim
+
     with pytest.raises(AssertionError):
-        myunet_nocross(dummy_input, timesteps = t_emb, context = cross)
+        myunet_nocross(dummy_input, timesteps = t_steps, context = cross)
+
+    myunet_notime = UNET(
+        channels_in = channels_in, 
+        channels_model = d_model,
+        channels_out = channels_out,
+        t_emb_dim = None,
+        context_dim = d_cross,
+        d_model = d_model
+    )
+
+    assert myunet_notime.down_blocks[1][0].time_emb[-1].in_features == d_model
+
+    out = myunet_notime(dummy_input, timesteps = t_steps, context = cross)
