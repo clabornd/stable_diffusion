@@ -1,9 +1,12 @@
+"""Helpers and main class definition for the UNET resblock
+
+Thanks to https://github.com/CompVis/stable-diffusion/blob/21f890f9da3cfbeaba8e2ac3c425ee9e998d5229/ldm/modules/diffusionmodules/openaimodel.py
+
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-# This resnet block needs:
-# The input
 
 
 def conv_nd(dims, *args, **kwargs):

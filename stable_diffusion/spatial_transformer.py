@@ -5,6 +5,15 @@ import torch.nn.functional as F
 
 
 class FeedForward(nn.Sequential):
+    """Feed forward module for the attention block.  Has two  linear layers with a GeLU and dropout layer in between.
+
+    Args:
+        d_in (int): Input dimension to the first linear layer.
+        d_out (int): Output dimension of the second linear layer.
+        mult (int): Multiplier (of the input dimension) for the hidden dimension. Default: 4
+        dropout (float): Dropout rate. Default: 0.1
+    """
+
     def __init__(self, d_in, d_out, mult=4, dropout=0.1):
         super().__init__()
 
@@ -16,6 +25,16 @@ class FeedForward(nn.Sequential):
 
 # Cross attention module, from scratch
 class CrossAttention(nn.Module):
+    """Basic cross attention module.
+
+    Args:
+        d_q (int): Input dimension of the query.
+        d_model (int): Inner dimension of the QKV projection layers. Default: 512
+        d_cross (int): Input dimension of the key and value inputs, for cross attention. Default: None
+        n_heads (int): Number of attention heads. Default: 8
+        dropout (float): Dropout rate. Default: 0.0
+    """
+
     def __init__(self, d_q, d_model=512, d_cross=None, n_heads=8, dropout=0.0):
         super().__init__()
 
@@ -69,6 +88,16 @@ class CrossAttention(nn.Module):
 
 
 class AttentionBlock(nn.Module):
+    """Wrapper for two cross-attention blocks followed by a feedforward layer.
+
+    Args:
+        d_q (int): Input dimension of the query.
+        d_cross (int): Input dimension of the key and value inputs, for cross attention. Default: None
+        d_model (int): Inner dimension of the QKV projection layers. Default: 512
+        n_heads (int): Number of attention heads. Default: 8
+        dropout (float): Dropout rate. Default: 0.0
+    """
+
     def __init__(self, d_q, d_cross=None, d_model=512, n_heads=8, dropout=0.0):
         super().__init__()
 
@@ -93,6 +122,18 @@ class AttentionBlock(nn.Module):
 
 
 class SpatialTransformer(nn.Module):
+    """Spatial transformer module for the UNet architecture.  Contains cross-attention layers that attend over the spatial dimensions of an image, while ingesting cross-attention embeddings from e.g. a text embedding model.
+
+    Args:
+        in_channels (int): Number of input channels.
+        d_q (int): Input dimension of the query.
+        d_cross (int): Input dimension of the key and value inputs, for cross attention. Default: None
+        d_model (int): Inner dimension of the QKV projection layers. Default: 512
+        n_heads (int): Number of attention heads. Default: 8
+        dropout (float): Dropout rate. Default: 0.0
+        depth (int): Number of attention blocks. Default: 1
+    """
+
     def __init__(
         self, in_channels, d_q, d_cross=None, d_model=512, n_heads=8, dropout=0.0, depth=1
     ):

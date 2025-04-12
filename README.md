@@ -1,10 +1,6 @@
-# stable-diffusion
+# Stable Diffusion
 
-<a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
-    <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
-</a>
-
-Attempts to rewrite stable diffusion from scratch
+Attempts to create stable diffusion with a lot of guidance from the rewrite of the openai diffusion model from the stable-diffusion repo:  https://github.com/CompVis/stable-diffusion/blob/21f890f9da3cfbeaba8e2ac3c425ee9e998d5229/ldm/modules/diffusionmodules/openaimodel.py.
 
 ## Project Organization
 
