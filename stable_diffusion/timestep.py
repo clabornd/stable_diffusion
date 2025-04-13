@@ -15,6 +15,9 @@ def time_embeddings(t: torch.tensor, out_dim: int, max_period: int = 10000):
     denom = torch.exp(
         -torch.tensor(max_period).log() * torch.arange(0, half, dtype=torch.float32) / half
     )
+
+    denom = denom.to(t.device)
+
     phases = t[:, None] * denom[None]
 
     # concatentate to form a tensor of shape B x out_dim
